@@ -586,7 +586,7 @@
 
                 <div class="searching-state" id="searching-state">
                     <div class="spinner"></div>
-                    <p style="color: var(--accent-light); font-weight: 600;">Ricerca partner in corso...</p>
+                    <p style="color: var(--accent-light); font-weight: 600;" id="searching-status-text">Ricerca partner in corso...</p>
                     <span style="font-size: 0.8rem; color: var(--text-muted);">Attendi un attimo mentre ti colleghiamo</span>
                 </div>
 
@@ -637,195 +637,13 @@
     </div>
 
     <script>
-        // Connessione al server WebSocket/Socket.io su Replit
-        const socket = io("https://7b35522f-bad6-458a-9779-dbce0bc38271-00-2ibg6ouvrti99.worf.replit.dev"); 
+        // URL di Render configurato correttamente
+        const RENDER_BACKEND_URL = "https://caffe-lampo.onrender.com"; 
+
+        const socket = io(RENDER_BACKEND_URL, {
+            transports: ['websocket', 'polling'],
+            reconnectionAttempts: 10
+        });
 
         const screenLobby = document.getElementById('screen-lobby');
-        const screenChat = document.getElementById('screen-chat');
-        const startChatBtn = document.getElementById('start-chat-btn');
-        const searchingState = document.getElementById('searching-state');
-        const startBtnText = document.getElementById('start-btn-text');
-        const headerStatus = document.getElementById('header-status');
-        const chatMessages = document.getElementById('chat-messages');
-        const messageInput = document.getElementById('message-input');
-        const sendBtn = document.getElementById('send-btn');
-        const uploadBtn = document.getElementById('upload-btn');
-        const fileInput = document.getElementById('file-input');
-        const nextPartnerBtn = document.getElementById('next-partner-btn');
-        const typingIndicator = document.getElementById('typing-indicator');
-        const imageModal = document.getElementById('image-modal');
-        const modalImg = document.getElementById('modal-img');
-        const closeModal = document.getElementById('close-modal');
-        const chatTimer = document.getElementById('chat-timer');
-
-        let isSearching = false;
-        let isConnected = false;
-        let timerInterval = null;
-        let secondsConnected = 0;
-        let typingTimeout = null;
-
-        startChatBtn.addEventListener('click', () => {
-            if (isSearching) {
-                isSearching = false;
-                searchingState.classList.remove('active');
-                startBtnText.textContent = "Trova uno Sconosciuto";
-                socket.emit('leave_room');
-                return;
-            }
-
-            isSearching = true;
-            searchingState.classList.add('active');
-            startBtnText.textContent = "Annulla ricerca";
-            socket.emit('find_partner');
-        });
-
-        socket.on('peer_connected', () => {
-            isSearching = false;
-            isConnected = true;
-            searchingState.classList.remove('active');
-            startBtnText.textContent = "Trova uno Sconosciuto";
-
-            screenLobby.classList.remove('active');
-            screenChat.classList.add('active');
-            headerStatus.innerHTML = '<span class="status-dot"></span> Sconosciuto Connesso';
-            
-            startTimer();
-        });
-
-        socket.on('receive_message', (data) => {
-            appendMessage(data.content, 'received', data.isImage);
-        });
-
-        socket.on('partner_typing', (isTyping) => {
-            if (isTyping) {
-                typingIndicator.classList.add('active');
-            } else {
-                typingIndicator.classList.remove('active');
-            }
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        });
-
-        socket.on('peer_disconnected', () => {
-            isConnected = false;
-            stopTimer();
-            
-            const sysMsg = document.createElement('div');
-            sysMsg.className = 'system-msg';
-            sysMsg.innerHTML = 'Lo sconosciuto si è disconnesso.';
-            chatMessages.appendChild(sysMsg);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        });
-
-        function sendMessage() {
-            const text = messageInput.value.trim();
-            if (!text || !isConnected) return;
-
-            appendMessage(text, 'sent', false);
-            socket.emit('send_message', { content: text, isImage: false });
-            messageInput.value = '';
-            socket.emit('typing', false);
-        }
-
-        messageInput.addEventListener('input', () => {
-            if (!isConnected) return;
-            socket.emit('typing', true);
-            
-            clearTimeout(typingTimeout);
-            typingTimeout = setTimeout(() => {
-                socket.emit('typing', false);
-            }, 1500);
-        });
-
-        uploadBtn.addEventListener('click', () => fileInput.click());
-
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file && isConnected) {
-                const reader = new FileReader();
-                reader.onload = function(evt) {
-                    const imageData = evt.target.result;
-                    appendMessage(imageData, 'sent', true);
-                    socket.emit('send_message', { content: imageData, isImage: true });
-                };
-                reader.readAsDataURL(file);
-            }
-            fileInput.value = '';
-        });
-
-        nextPartnerBtn.addEventListener('click', () => {
-            socket.emit('leave_room');
-            isConnected = false;
-            stopTimer();
-            
-            chatMessages.innerHTML = `
-                <div class="system-msg">
-                    <i class="fa-solid fa-lock"></i> Chat crittografata. Sei connesso con uno sconosciuto. Dì ciao!
-                </div>
-            `;
-            screenChat.classList.remove('active');
-            screenLobby.classList.add('active');
-            headerStatus.innerHTML = '<span class="status-dot"></span> Online';
-        });
-
-        function appendMessage(content, type, isImage = false) {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${type}`;
-            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-            if (isImage) {
-                msgDiv.innerHTML = `
-                    <div class="msg-bubble" style="background: transparent; padding: 0;">
-                        <img src="${content}" class="msg-image" onclick="openModal('${content}')" alt="Foto">
-                    </div>
-                    <span class="msg-time">${timeStr}</span>
-                `;
-            } else {
-                msgDiv.innerHTML = `
-                    <div class="msg-bubble">${escapeHtml(content)}</div>
-                    <span class="msg-time">${timeStr}</span>
-                `;
-            }
-
-            chatMessages.appendChild(msgDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        function startTimer() {
-            secondsConnected = 0;
-            clearInterval(timerInterval);
-            timerInterval = setInterval(() => {
-                secondsConnected++;
-                const mins = String(Math.floor(secondsConnected / 60)).padStart(2, '0');
-                const secs = String(secondsConnected % 60).padStart(2, '0');
-                chatTimer.textContent = `Connesso: ${mins}:${secs}`;
-            }, 1000);
-        }
-
-        function stopTimer() {
-            clearInterval(timerInterval);
-            chatTimer.textContent = "Connesso: 00:00";
-        }
-
-        sendBtn.addEventListener('click', sendMessage);
-        messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
-
-        window.openModal = function(src) {
-            modalImg.src = src;
-            imageModal.classList.add('active');
-        };
-
-        closeModal.addEventListener('click', () => imageModal.classList.remove('active'));
-        imageModal.addEventListener('click', (e) => {
-            if (e.target === imageModal) imageModal.classList.remove('active');
-        });
-    </script>
-</body>
-</html>
+        
