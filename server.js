@@ -5,6 +5,7 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 
+// Configurazione Socket.io con CORS libero e trasporti supportati
 const io = new Server(server, {
     cors: {
         origin: "*",
@@ -13,12 +14,18 @@ const io = new Server(server, {
     transports: ['websocket', 'polling']
 });
 
+// Rotta base di controllo (Health Check)
+app.get('/', (req, res) => {
+    res.send('Server Pausa Caffè è perfettamente attivo!');
+});
+
 let waitingUser = null;
 
 io.on('connection', (socket) => {
     console.log(`Utente connesso: ${socket.id}`);
 
     socket.on('find_partner', () => {
+        // Se c'è un altro utente in attesa diverso da chi fa la richiesta
         if (waitingUser && waitingUser.id !== socket.id) {
             const partnerSocket = waitingUser;
             waitingUser = null;
@@ -31,8 +38,11 @@ io.on('connection', (socket) => {
             partnerSocket.roomId = roomId;
 
             io.to(roomId).emit('peer_connected');
+            console.log(`Match creato! Stanza: ${roomId}`);
         } else {
+            // Se non c'è nessuno, metti questo utente in coda
             waitingUser = socket;
+            console.log(`Utente ${socket.id} messo in attesa.`);
         }
     });
 
@@ -63,6 +73,7 @@ io.on('connection', (socket) => {
     }
 });
 
+// Avvio del server su porta dinamica e indirizzo 0.0.0.0
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server attivo sulla porta ${PORT}`);
