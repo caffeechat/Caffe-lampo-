@@ -1,11 +1,15 @@
 const express = require('express');
 const http = require('http');
+const path = require('path');
 const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
 
-// Configurazione Socket.io con CORS libero e trasporti supportati
+// Serve i file statici (index.html, immagini, sw.js, manifest.json, ecc.)
+app.use(express.static(path.join(__dirname)));
+
+// Configurazione Socket.io
 const io = new Server(server, {
     cors: {
         origin: "*",
@@ -14,9 +18,9 @@ const io = new Server(server, {
     transports: ['websocket', 'polling']
 });
 
-// Rotta base di controllo (Health Check)
+// Rotta principale: invia l'index.html
 app.get('/', (req, res) => {
-    res.send('Server Pausa Caffè è perfettamente attivo!');
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 let waitingUser = null;
@@ -25,7 +29,6 @@ io.on('connection', (socket) => {
     console.log(`Utente connesso: ${socket.id}`);
 
     socket.on('find_partner', () => {
-        // Se c'è un altro utente in attesa diverso da chi fa la richiesta
         if (waitingUser && waitingUser.id !== socket.id) {
             const partnerSocket = waitingUser;
             waitingUser = null;
@@ -40,9 +43,8 @@ io.on('connection', (socket) => {
             io.to(roomId).emit('peer_connected');
             console.log(`Match creato! Stanza: ${roomId}`);
         } else {
-            // Se non c'è nessuno, metti questo utente in coda
             waitingUser = socket;
-            console.log(`Utente ${socket.id} messo in attesa.`);
+            console.log(`Utente ${socket.id} in attesa.`);
         }
     });
 
@@ -73,7 +75,6 @@ io.on('connection', (socket) => {
     }
 });
 
-// Avvio del server su porta dinamica e indirizzo 0.0.0.0
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server attivo sulla porta ${PORT}`);
