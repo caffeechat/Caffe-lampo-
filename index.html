@@ -23,7 +23,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Libreria Socket.io -->
+    <!-- Libreria Socket.io (Connessione flessibile automatica/remota) -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
     <!-- Registrazione Service Worker per PWA -->
@@ -411,6 +411,7 @@
             border-bottom-left-radius: 4px;
             gap: 4px;
             align-items: center;
+            margin: 0 16px 8px 16px;
         }
 
         .typing-indicator.active { display: flex; }
@@ -637,13 +638,254 @@
     </div>
 
     <script>
-        // URL di Render configurato correttamente
-        const RENDER_BACKEND_URL = "https://caffe-lampo.onrender.com"; 
+        // Rileva automaticamente se siamo su localhost o Render
+        const RENDER_BACKEND_URL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+            ? "/" 
+            : "https://caffe-lampo.onrender.com"; 
 
         const socket = io(RENDER_BACKEND_URL, {
             transports: ['websocket', 'polling'],
             reconnectionAttempts: 10
         });
 
+        // Elementi DOM
         const screenLobby = document.getElementById('screen-lobby');
+        const screenChat = document.getElementById('screen-chat');
+        const startChatBtn = document.getElementById('start-chat-btn');
+        const startBtnText = document.getElementById('start-btn-text');
+        const searchingState = document.getElementById('searching-state');
+        const nextPartnerBtn = document.getElementById('next-partner-btn');
         
+        const chatMessages = document.getElementById('chat-messages');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const uploadBtn = document.getElementById('upload-btn');
+        const fileInput = document.getElementById('file-input');
+        const typingIndicator = document.getElementById('typing-indicator');
+        const chatTimer = document.getElementById('chat-timer');
+
+        const imageModal = document.getElementById('image-modal');
+        const modalImg = document.getElementById('modal-img');
+        const closeModal = document.getElementById('close-modal');
+
+        let isSearching = false;
+        let timerInterval = null;
+        let secondsConnected = 0;
+        let typingTimeout = null;
+
+        // Gestione Connessione Socket
+        socket.on('connect', () => {
+            console.log('Connesso al server Socket.io con ID:', socket.id);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnesso dal server.');
+            addSystemMessage('Connessione interrotta dal server.');
+        });
+
+        // 1. Avvio Ricerca Partner
+        startChatBtn.addEventListener('click', () => {
+            if (!isSearching) {
+                isSearching = true;
+                searchingState.classList.add('active');
+                startBtnText.textContent = "Annulla Ricerca";
+                socket.emit('find_partner');
+            } else {
+                cancelSearch();
+            }
+        });
+
+        function cancelSearch() {
+            isSearching = false;
+            searchingState.classList.remove('active');
+            startBtnText.textContent = "Trova uno Sconosciuto";
+            socket.emit('cancel_search');
+        }
+
+        // 2. Eventi Socket per Abbinamento
+        socket.on('peer_connected', () => {
+            isSearching = false;
+            searchingState.classList.remove('active');
+            startBtnText.textContent = "Trova uno Sconosciuto";
+
+            // Passa alla schermata chat
+            screenLobby.classList.remove('active');
+            screenChat.classList.add('active');
+            
+            resetChatArea();
+            startTimer();
+        });
+
+        socket.on('peer_disconnected', () => {
+            addSystemMessage('Lo sconosciuto ha abbandonato la chat.');
+            stopTimer();
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+            uploadBtn.disabled = true;
+        });
+
+        // 3. Invio e Ricezione Messaggi Testo
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (text !== '') {
+                socket.emit('send_message', { text: text });
+                appendMessage(text, 'sent');
+                messageInput.value = '';
+                socket.emit('stop_typing');
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            } else {
+                socket.emit('typing');
+                clearTimeout(typingTimeout);
+                typingTimeout = setTimeout(() => {
+                    socket.emit('stop_typing');
+                }, 2000);
+            }
+        });
+
+        socket.on('receive_message', (data) => {
+            if (data.text) {
+                appendMessage(data.text, 'received');
+            } else if (data.image) {
+                appendImage(data.image, 'received');
+            }
+        });
+
+        // Indicatori di Scrittura
+        socket.on('partner_typing', () => {
+            typingIndicator.classList.add('active');
+        });
+
+        socket.on('partner_stop_typing', () => {
+            typingIndicator.classList.remove('active');
+        });
+
+        // 4. Invio Foto/Immagini
+        uploadBtn.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const base64Image = event.target.result;
+                    socket.emit('send_message', { image: base64Image });
+                    appendImage(base64Image, 'sent');
+                };
+                reader.readAsDataURL(file);
+            }
+            fileInput.value = ''; // Reset input
+        });
+
+        // Helper Rendering Messaggi
+        function appendMessage(text, type) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${type}`;
+
+            const bubble = document.createElement('div');
+            bubble.className = 'msg-bubble';
+            bubble.textContent = text;
+
+            const time = document.createElement('span');
+            time.className = 'msg-time';
+            time.textContent = getCurrentTime();
+
+            msgDiv.appendChild(bubble);
+            msgDiv.appendChild(time);
+            chatMessages.appendChild(msgDiv);
+
+            scrollToBottom();
+        }
+
+        function appendImage(src, type) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${type}`;
+
+            const img = document.createElement('img');
+            img.className = 'msg-image';
+            img.src = src;
+            img.onclick = () => openImageModal(src);
+
+            const time = document.createElement('span');
+            time.className = 'msg-time';
+            time.textContent = getCurrentTime();
+
+            msgDiv.appendChild(img);
+            msgDiv.appendChild(time);
+            chatMessages.appendChild(msgDiv);
+
+            scrollToBottom();
+        }
+
+        function addSystemMessage(text) {
+            const sysDiv = document.createElement('div');
+            sysDiv.className = 'system-msg';
+            sysDiv.innerHTML = `<i class="fa-solid fa-circle-info"></i> ${text}`;
+            chatMessages.appendChild(sysDiv);
+            scrollToBottom();
+        }
+
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function getCurrentTime() {
+            const now = new Date();
+            return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // 5. Gestione Prossimo / Abbandona Chat
+        nextPartnerBtn.addEventListener('click', () => {
+            socket.emit('leave_chat');
+            stopTimer();
+            screenChat.classList.remove('active');
+            screenLobby.classList.add('active');
+        });
+
+        function resetChatArea() {
+            chatMessages.innerHTML = `
+                <div class="system-msg">
+                    <i class="fa-solid fa-lock"></i> Chat crittografata. Sei connesso con uno sconosciuto. Dì ciao!
+                </div>
+            `;
+            messageInput.disabled = false;
+            sendBtn.disabled = false;
+            uploadBtn.disabled = false;
+            messageInput.value = '';
+            typingIndicator.classList.remove('active');
+        }
+
+        // 6. Timer di Conversazione
+        function startTimer() {
+            stopTimer();
+            secondsConnected = 0;
+            chatTimer.textContent = 'Connesso: 00:00';
+            timerInterval = setInterval(() => {
+                secondsConnected++;
+                const mins = String(Math.floor(secondsConnected / 60)).padStart(2, '0');
+                const secs = String(secondsConnected % 60).padStart(2, '0');
+                chatTimer.textContent = `Connesso: ${mins}:${secs}`;
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+        }
+
+        // 7. Modale Visualizzazione Foto
+        function openImageModal(src) {
+            modalImg.src = src;
+            imageModal.classList.add('active');
+        }
+
+        closeModal.addEventListener('click', () => {
+            imageModal.classList.remove('active');
+        });
+    </script>
+</body>
+</html>
