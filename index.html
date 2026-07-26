@@ -5,17 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pausa Caffè - Chat Anonima</title>
     
-    <!-- Impostazioni Mobile PWA -->
     <meta name="theme-color" content="#120D0A">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Pausa Caffè">
-
-    <!-- Icona App e Manifest PWA -->
     <link rel="icon" type="image/png" href="icona.png">
-    <link rel="apple-touch-icon" href="icona.png">
-    <link rel="manifest" href="manifest.json">
     
     <!-- Google Fonts & FontAwesome -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -23,19 +14,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Libreria Socket.io -->
+    <!-- Socket.io -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-
-    <!-- Registrazione Service Worker per PWA -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js', { scope: './' })
-                    .then(reg => console.log('PWA Service Worker Attivo!'))
-                    .catch(err => console.log('Errore Registrazione PWA:', err));
-            });
-        }
-    </script>
 
     <style>
         :root {
@@ -56,539 +36,79 @@
             --radius-sm: 8px;
             --radius-md: 16px;
             --radius-lg: 24px;
-            --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: var(--font-family);
-            -webkit-tap-highlight-color: transparent;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-family); }
+        body, html { height: 100%; width: 100%; background-color: var(--bg-primary); color: var(--text-main); overflow: hidden; display: flex; justify-content: center; align-items: center; }
 
-        body, html {
-            height: 100%;
-            width: 100%;
-            background-color: var(--bg-primary);
-            color: var(--text-main);
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
+        .app-container { width: 100%; max-width: 600px; height: 100%; max-height: 100vh; background-color: var(--bg-secondary); display: flex; flex-direction: column; position: relative; }
+        @media (min-width: 600px) { .app-container { height: 92vh; border-radius: var(--radius-lg); border: 1px solid var(--border-color); } }
 
-        .app-container {
-            width: 100%;
-            max-width: 600px;
-            height: 100%;
-            max-height: 100vh;
-            background-color: var(--bg-secondary);
-            display: flex;
-            flex-direction: column;
-            position: relative;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-        }
+        .app-header { padding: 16px 20px; background-color: rgba(26, 19, 14, 0.95); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; }
+        .brand-info { display: flex; align-items: center; gap: 12px; }
+        .brand-icon { width: 40px; height: 40px; background: linear-gradient(135deg, #D97706, #78350F); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .brand-text h1 { font-size: 1.1rem; font-weight: 700; }
+        .brand-text p { font-size: 0.75rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background-color: var(--online-green); display: inline-block; }
 
-        @media (min-width: 600px) {
-            .app-container {
-                height: 92vh;
-                border-radius: var(--radius-lg);
-                border: 1px solid var(--border-color);
-            }
-        }
+        .screen { flex: 1; display: none; flex-direction: column; overflow: hidden; position: relative; }
+        .screen.active { display: flex; }
 
-        /* Header Bar */
-        .app-header {
-            padding: 16px 20px;
-            background-color: rgba(26, 19, 14, 0.95);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            z-index: 10;
-        }
+        .lobby-content { flex: 1; padding: 30px 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 24px; }
+        .cup-container { width: 90px; height: 90px; background: #2A2018; border: 2px solid var(--border-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 42px; }
 
-        .brand-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
+        .btn-primary { width: 100%; max-width: 340px; padding: 16px 24px; background: linear-gradient(135deg, var(--accent-primary), var(--accent-hover)); color: white; border: none; border-radius: var(--radius-md); font-size: 1rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        .brand-icon {
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, #D97706, #78350F);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            box-shadow: 0 4px 12px rgba(217, 119, 6, 0.3);
-        }
+        .searching-state { display: none; flex-direction: column; align-items: center; gap: 16px; }
+        .searching-state.active { display: flex; }
+        .spinner { width: 28px; height: 28px; border: 3px solid rgba(217, 119, 6, 0.2); border-top-color: var(--accent-primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-        .brand-text h1 {
-            font-size: 1.1rem;
-            font-weight: 700;
-            letter-spacing: -0.3px;
-        }
-
-        .brand-text p {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: var(--online-green);
-            display: inline-block;
-            box-shadow: 0 0 8px var(--online-green);
-        }
-
-        .header-actions {
-            display: flex;
-            gap: 10px;
-        }
-
-        .btn-icon {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            color: var(--text-main);
-            width: 38px;
-            height: 38px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .btn-icon:hover {
-            background: var(--bg-hover);
-            border-color: var(--accent-primary);
-        }
-
-        /* Screens */
-        .screen {
-            flex: 1;
-            display: none;
-            flex-direction: column;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .screen.active {
-            display: flex;
-        }
-
-        /* Lobby */
-        .lobby-content {
-            flex: 1;
-            padding: 30px 24px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            gap: 24px;
-        }
-
-        .coffee-animation {
-            position: relative;
-            width: 140px;
-            height: 140px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .pulse-ring {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            border: 2px solid var(--accent-primary);
-            opacity: 0;
-            animation: pulse 2.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
-        }
-
-        .pulse-ring:nth-child(2) {
-            animation-delay: 0.8s;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(0.6); opacity: 0.8; }
-            100% { transform: scale(1.4); opacity: 0; }
-        }
-
-        .cup-container {
-            width: 90px;
-            height: 90px;
-            background: linear-gradient(145deg, #2A2018, #1E1712);
-            border: 2px solid var(--border-color);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 42px;
-            z-index: 2;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-        }
-
-        .lobby-title {
-            font-size: 1.6rem;
-            font-weight: 700;
-            color: #FFF;
-        }
-
-        .lobby-subtitle {
-            font-size: 0.95rem;
-            color: var(--text-muted);
-            max-width: 320px;
-            line-height: 1.5;
-        }
-
-        .features-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            width: 100%;
-            max-width: 340px;
-            margin: 10px 0;
-        }
-
-        .feature-item {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            padding: 12px 16px;
-            border-radius: var(--radius-sm);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 0.85rem;
-            text-align: left;
-        }
-
-        .feature-item i {
-            color: var(--accent-primary);
-            font-size: 1.1rem;
-            width: 20px;
-            text-align: center;
-        }
-
-        .btn-primary {
-            width: 100%;
-            max-width: 340px;
-            padding: 16px 24px;
-            background: linear-gradient(135deg, var(--accent-primary), var(--accent-hover));
-            color: white;
-            border: none;
-            border-radius: var(--radius-md);
-            font-size: 1rem;
-            font-weight: 700;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            box-shadow: 0 8px 20px rgba(217, 119, 6, 0.35);
-            transition: all 0.25s ease;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 24px rgba(217, 119, 6, 0.45);
-        }
-
-        .searching-state {
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            gap: 16px;
-        }
-
-        .searching-state.active {
-            display: flex;
-        }
-
-        .spinner {
-            width: 28px;
-            height: 28px;
-            border: 3px solid rgba(217, 119, 6, 0.2);
-            border-top-color: var(--accent-primary);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Chat Screen */
-        .chat-messages {
-            flex: 1;
-            padding: 20px 16px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .system-msg {
-            align-self: center;
-            background: rgba(36, 28, 21, 0.8);
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-            font-size: 0.78rem;
-            padding: 8px 16px;
-            border-radius: 20px;
-            margin: 8px 0;
-            text-align: center;
-            max-width: 90%;
-        }
-
-        .message {
-            max-width: 80%;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
+        /* Chat */
+        .chat-messages { flex: 1; padding: 20px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+        .system-msg { align-self: center; background: rgba(36, 28, 21, 0.8); border: 1px solid var(--border-color); color: var(--text-muted); font-size: 0.78rem; padding: 8px 16px; border-radius: 20px; }
+        .message { max-width: 80%; display: flex; flex-direction: column; gap: 4px; }
         .message.sent { align-self: flex-end; }
         .message.received { align-self: flex-start; }
+        .msg-bubble { padding: 12px 16px; border-radius: 18px; font-size: 0.92rem; word-break: break-word; }
+        .message.sent .msg-bubble { background-color: var(--msg-sent); color: white; }
+        .message.received .msg-bubble { background-color: var(--msg-received); color: var(--text-main); border: 1px solid var(--border-color); }
 
-        .msg-bubble {
-            padding: 12px 16px;
-            border-radius: 18px;
-            font-size: 0.92rem;
-            line-height: 1.45;
-            word-break: break-word;
-        }
-
-        .message.sent .msg-bubble {
-            background-color: var(--msg-sent);
-            color: white;
-            border-bottom-right-radius: 4px;
-        }
-
-        .message.received .msg-bubble {
-            background-color: var(--msg-received);
-            color: var(--text-main);
-            border: 1px solid var(--border-color);
-            border-bottom-left-radius: 4px;
-        }
-
-        .msg-image {
-            max-width: 100%;
-            max-height: 240px;
-            border-radius: 12px;
-            object-fit: cover;
-            cursor: pointer;
-            margin-top: 4px;
-        }
-
-        .msg-time {
-            font-size: 0.68rem;
-            color: var(--text-muted);
-            align-self: flex-end;
-            margin-top: 2px;
-        }
-
-        .typing-indicator {
-            display: none;
-            align-self: flex-start;
-            background: var(--msg-received);
-            border: 1px solid var(--border-color);
-            padding: 10px 16px;
-            border-radius: 18px;
-            border-bottom-left-radius: 4px;
-            gap: 4px;
-            align-items: center;
-            margin: 0 16px 8px 16px;
-        }
-
-        .typing-indicator.active { display: flex; }
-
-        .dot {
-            width: 6px;
-            height: 6px;
-            background: var(--text-muted);
-            border-radius: 50%;
-            animation: bounce 1.4s infinite ease-in-out both;
-        }
-        .dot:nth-child(1) { animation-delay: -0.32s; }
-        .dot:nth-child(2) { animation-delay: -0.16s; }
-
-        @keyframes bounce {
-            0%, 80%, 100% { transform: scale(0); }
-            40% { transform: scale(1.0); }
-        }
-
-        .chat-input-area {
-            padding: 12px 16px;
-            background-color: var(--bg-card);
-            border-top: 1px solid var(--border-color);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .input-wrapper {
-            flex: 1;
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 24px;
-            display: flex;
-            align-items: center;
-            padding: 4px 12px 4px 16px;
-        }
-
-        .chat-input {
-            width: 100%;
-            background: none;
-            border: none;
-            color: var(--text-main);
-            font-size: 0.95rem;
-            outline: none;
-            padding: 8px 0;
-        }
-
-        .btn-upload {
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            font-size: 1.2rem;
-            cursor: pointer;
-            padding: 6px;
-        }
-
-        .btn-send {
-            width: 42px;
-            height: 42px;
-            border-radius: 50%;
-            background: var(--accent-primary);
-            color: white;
-            border: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1rem;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-
-        .chat-controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 16px;
-            background: var(--bg-primary);
-            border-top: 1px solid var(--border-color);
-        }
-
-        .btn-next {
-            background: rgba(239, 68, 68, 0.15);
-            color: var(--danger-red);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            padding: 8px 18px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .image-modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.9);
-            z-index: 100;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-
-        .image-modal.active { display: flex; }
-
-        .image-modal img {
-            max-width: 95%;
-            max-height: 90vh;
-            border-radius: 12px;
-            object-fit: contain;
-        }
-
-        .close-modal {
-            position: absolute;
-            top: 20px; right: 20px;
-            color: white;
-            font-size: 2rem;
-            cursor: pointer;
-        }
-
-        #file-input { display: none; }
+        .chat-input-area { padding: 12px 16px; background-color: var(--bg-card); border-top: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px; }
+        .input-wrapper { flex: 1; background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 24px; padding: 4px 16px; }
+        .chat-input { width: 100%; background: none; border: none; color: var(--text-main); font-size: 0.95rem; outline: none; padding: 8px 0; }
+        .btn-send { width: 42px; height: 42px; border-radius: 50%; background: var(--accent-primary); color: white; border: none; cursor: pointer; }
+        .chat-controls { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: var(--bg-primary); border-top: 1px solid var(--border-color); }
+        .btn-next { background: rgba(239, 68, 68, 0.15); color: var(--danger-red); border: 1px solid rgba(239, 68, 68, 0.3); padding: 8px 18px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <div class="app-container">
-        <!-- Header -->
         <header class="app-header">
             <div class="brand-info">
                 <div class="brand-icon">☕</div>
                 <div class="brand-text">
                     <h1>Pausa Caffè</h1>
-                    <p id="header-status"><span class="status-dot"></span> Online</p>
+                    <p id="header-status"><span class="status-dot" id="status-dot" style="background:#F59E0B"></span> Connessione...</p>
                 </div>
-            </div>
-            <div class="header-actions">
-                <button class="btn-icon" id="theme-toggle"><i class="fa-solid fa-moon"></i></button>
-                <button class="btn-icon" id="info-btn"><i class="fa-solid fa-shield-halved"></i></button>
             </div>
         </header>
 
         <!-- LOBBY SCREEN -->
         <main class="screen active" id="screen-lobby">
             <div class="lobby-content">
-                <div class="coffee-animation">
-                    <div class="pulse-ring"></div>
-                    <div class="pulse-ring"></div>
-                    <div class="cup-container">☕</div>
-                </div>
-
+                <div class="cup-container">☕</div>
                 <div>
-                    <h2 class="lobby-title">Pausa Caffè</h2>
-                    <p class="lobby-subtitle">Parla e invia foto in modo totalmente anonimo con uno sconosciuto.</p>
-                </div>
-
-                <div class="features-list">
-                    <div class="feature-item">
-                        <i class="fa-solid fa-user-ninja"></i>
-                        <span>Nessuna registrazione richiesta. 100% Anonimo.</span>
-                    </div>
-                    <div class="feature-item">
-                        <i class="fa-solid fa-image"></i>
-                        <span>Condividi immagini in tempo reale.</span>
-                    </div>
-                    <div class="feature-item">
-                        <i class="fa-solid fa-bolt"></i>
-                        <span>Abbinamento rapido e sicuro.</span>
-                    </div>
+                    <h2>Pausa Caffè</h2>
+                    <p style="color: var(--text-muted); margin-top: 6px;">Chat anonima in tempo reale</p>
                 </div>
 
                 <div class="searching-state" id="searching-state">
                     <div class="spinner"></div>
-                    <p style="color: var(--accent-light); font-weight: 600;" id="searching-status-text">Ricerca partner in corso...</p>
-                    <span style="font-size: 0.8rem; color: var(--text-muted);">Attendi un attimo mentre ti colleghiamo</span>
+                    <p style="color: var(--accent-light); font-weight: 600;">Ricerca partner in corso...</p>
                 </div>
 
                 <button class="btn-primary" id="start-chat-btn">
@@ -601,283 +121,126 @@
         <!-- CHAT SCREEN -->
         <main class="screen" id="screen-chat">
             <div class="chat-messages" id="chat-messages">
-                <div class="system-msg">
-                    <i class="fa-solid fa-lock"></i> Chat crittografata. Sei connesso con uno sconosciuto. Dì ciao!
-                </div>
-            </div>
-
-            <div class="typing-indicator" id="typing-indicator">
-                <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-                <span style="font-size: 0.75rem; color: var(--text-muted); margin-left: 6px;">Lo sconosciuto sta scrivendo...</span>
+                <div class="system-msg">Sei connesso con uno sconosciuto!</div>
             </div>
 
             <div class="chat-controls">
-                <button class="btn-next" id="next-partner-btn">
-                    <i class="fa-solid fa-forward"></i> Prossimo / Chiudi
-                </button>
-                <span style="font-size: 0.75rem; color: var(--text-muted);" id="chat-timer">Connesso: 00:00</span>
+                <button class="btn-next" id="next-partner-btn">Chiudi Chat</button>
             </div>
 
             <div class="chat-input-area">
-                <button class="btn-upload" id="upload-btn"><i class="fa-solid fa-paperclip"></i></button>
-                <input type="file" id="file-input" accept="image/*">
-                
                 <div class="input-wrapper">
-                    <input type="text" class="chat-input" id="message-input" placeholder="Scrivi un messaggio..." autocomplete="off">
+                    <input type="text" class="chat-input" id="message-input" placeholder="Scrivi un messaggio...">
                 </div>
-
                 <button class="btn-send" id="send-btn"><i class="fa-solid fa-paper-plane"></i></button>
             </div>
         </main>
     </div>
 
-    <!-- Image Modal -->
-    <div class="image-modal" id="image-modal">
-        <span class="close-modal" id="close-modal">&times;</span>
-        <img id="modal-img" src="" alt="Foto">
-    </div>
-
     <script>
-        // Si connette automaticamente all'origine da cui viene aperta la pagina
-        const socket = io();
+        // Si connette alla stessa origine del Web Service
+        const socket = io({
+            transports: ['polling', 'websocket'],
+            reconnectionAttempts: 10,
+            timeout: 20000
+        });
 
-        // Elementi DOM
-        const screenLobby = document.getElementById('screen-lobby');
-        const screenChat = document.getElementById('screen-chat');
+        const headerStatus = document.getElementById('header-status');
+        const statusDot = document.getElementById('status-dot');
         const startChatBtn = document.getElementById('start-chat-btn');
         const startBtnText = document.getElementById('start-btn-text');
         const searchingState = document.getElementById('searching-state');
-        const nextPartnerBtn = document.getElementById('next-partner-btn');
-        
+        const screenLobby = document.getElementById('screen-lobby');
+        const screenChat = document.getElementById('screen-chat');
         const chatMessages = document.getElementById('chat-messages');
         const messageInput = document.getElementById('message-input');
         const sendBtn = document.getElementById('send-btn');
-        const uploadBtn = document.getElementById('upload-btn');
-        const fileInput = document.getElementById('file-input');
-        const typingIndicator = document.getElementById('typing-indicator');
-        const chatTimer = document.getElementById('chat-timer');
-
-        const imageModal = document.getElementById('image-modal');
-        const modalImg = document.getElementById('modal-img');
-        const closeModal = document.getElementById('close-modal');
+        const nextPartnerBtn = document.getElementById('next-partner-btn');
 
         let isSearching = false;
-        let timerInterval = null;
-        let secondsConnected = 0;
-        let typingTimeout = null;
 
-        // Gestione Connessione Socket
+        // Gestione degli stati di connessione
         socket.on('connect', () => {
-            console.log('Connesso al server Socket.io con ID:', socket.id);
+            headerStatus.innerHTML = '<span class="status-dot"></span> Online';
+            startChatBtn.disabled = false;
+        });
+
+        socket.on('connect_error', () => {
+            headerStatus.innerHTML = '<span class="status-dot" style="background:#EF4444"></span> Avvio server... (attendi)';
         });
 
         socket.on('disconnect', () => {
-            console.log('Disconnesso dal server.');
-            addSystemMessage('Connessione interrotta dal server.');
+            headerStatus.innerHTML = '<span class="status-dot" style="background:#EF4444"></span> Disconnesso';
         });
 
-        // 1. Avvio Ricerca Partner
+        // Click Bottone "Trova Sconosciuto"
         startChatBtn.addEventListener('click', () => {
+            if (!socket.connected) {
+                alert("Il server su Render si sta svegliando dalla pausa! Attendi circa 30 secondi e riprova.");
+                return;
+            }
+
             if (!isSearching) {
                 isSearching = true;
                 searchingState.classList.add('active');
                 startBtnText.textContent = "Annulla Ricerca";
                 socket.emit('find_partner');
             } else {
-                cancelSearch();
+                isSearching = false;
+                searchingState.classList.remove('active');
+                startBtnText.textContent = "Trova uno Sconosciuto";
+                socket.emit('cancel_search');
             }
         });
 
-        function cancelSearch() {
-            isSearching = false;
-            searchingState.classList.remove('active');
-            startBtnText.textContent = "Trova uno Sconosciuto";
-            socket.emit('cancel_search');
-        }
-
-        // 2. Eventi Socket per Abbinamento
+        // Eventi Match
         socket.on('peer_connected', () => {
             isSearching = false;
             searchingState.classList.remove('active');
             startBtnText.textContent = "Trova uno Sconosciuto";
 
-            // Passa alla schermata chat
             screenLobby.classList.remove('active');
             screenChat.classList.add('active');
-            
-            resetChatArea();
-            startTimer();
+            chatMessages.innerHTML = '<div class="system-msg">Sei connesso con uno sconosciuto!</div>';
         });
 
         socket.on('peer_disconnected', () => {
-            addSystemMessage('Lo sconosciuto ha abbandonato la chat.');
-            stopTimer();
-            messageInput.disabled = true;
-            sendBtn.disabled = true;
-            uploadBtn.disabled = true;
+            const sysMsg = document.createElement('div');
+            sysMsg.className = 'system-msg';
+            sysMsg.textContent = 'Lo sconosciuto si è disconnesso.';
+            chatMessages.appendChild(sysMsg);
         });
 
-        // 3. Invio e Ricezione Messaggi Testo
+        // Invio Messaggi
         function sendMessage() {
-            const text = messageInput.value.trim();
-            if (text !== '') {
-                socket.emit('send_message', { text: text });
-                appendMessage(text, 'sent');
+            const txt = messageInput.value.trim();
+            if (txt) {
+                socket.emit('send_message', { text: txt });
+                addMsg(txt, 'sent');
                 messageInput.value = '';
-                socket.emit('stop_typing');
             }
         }
 
         sendBtn.addEventListener('click', sendMessage);
-        messageInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                sendMessage();
-            } else {
-                socket.emit('typing');
-                clearTimeout(typingTimeout);
-                typingTimeout = setTimeout(() => {
-                    socket.emit('stop_typing');
-                }, 2000);
-            }
-        });
+        messageInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
 
         socket.on('receive_message', (data) => {
-            if (data.text) {
-                appendMessage(data.text, 'received');
-            } else if (data.image) {
-                appendImage(data.image, 'received');
-            }
+            if (data.text) addMsg(data.text, 'received');
         });
 
-        // Indicatori di Scrittura
-        socket.on('partner_typing', () => {
-            typingIndicator.classList.add('active');
-        });
-
-        socket.on('partner_stop_typing', () => {
-            typingIndicator.classList.remove('active');
-        });
-
-        // 4. Invio Foto/Immagini
-        uploadBtn.addEventListener('click', () => fileInput.click());
-
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const base64Image = event.target.result;
-                    socket.emit('send_message', { image: base64Image });
-                    appendImage(base64Image, 'sent');
-                };
-                reader.readAsDataURL(file);
-            }
-            fileInput.value = ''; // Reset input
-        });
-
-        // Helper Rendering Messaggi
-        function appendMessage(text, type) {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${type}`;
-
-            const bubble = document.createElement('div');
-            bubble.className = 'msg-bubble';
-            bubble.textContent = text;
-
-            const time = document.createElement('span');
-            time.className = 'msg-time';
-            time.textContent = getCurrentTime();
-
-            msgDiv.appendChild(bubble);
-            msgDiv.appendChild(time);
-            chatMessages.appendChild(msgDiv);
-
-            scrollToBottom();
-        }
-
-        function appendImage(src, type) {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${type}`;
-
-            const img = document.createElement('img');
-            img.className = 'msg-image';
-            img.src = src;
-            img.onclick = () => openImageModal(src);
-
-            const time = document.createElement('span');
-            time.className = 'msg-time';
-            time.textContent = getCurrentTime();
-
-            msgDiv.appendChild(img);
-            msgDiv.appendChild(time);
-            chatMessages.appendChild(msgDiv);
-
-            scrollToBottom();
-        }
-
-        function addSystemMessage(text) {
-            const sysDiv = document.createElement('div');
-            sysDiv.className = 'system-msg';
-            sysDiv.innerHTML = `<i class="fa-solid fa-circle-info"></i> ${text}`;
-            chatMessages.appendChild(sysDiv);
-            scrollToBottom();
-        }
-
-        function scrollToBottom() {
+        function addMsg(txt, type) {
+            const m = document.createElement('div');
+            m.className = `message ${type}`;
+            m.innerHTML = `<div class="msg-bubble">${txt}</div>`;
+            chatMessages.appendChild(m);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
-        function getCurrentTime() {
-            const now = new Date();
-            return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-
-        // 5. Gestione Prossimo / Abbandona Chat
+        // Torna alla Home
         nextPartnerBtn.addEventListener('click', () => {
             socket.emit('leave_chat');
-            stopTimer();
             screenChat.classList.remove('active');
             screenLobby.classList.add('active');
-        });
-
-        function resetChatArea() {
-            chatMessages.innerHTML = `
-                <div class="system-msg">
-                    <i class="fa-solid fa-lock"></i> Chat crittografata. Sei connesso con uno sconosciuto. Dì ciao!
-                </div>
-            `;
-            messageInput.disabled = false;
-            sendBtn.disabled = false;
-            uploadBtn.disabled = false;
-            messageInput.value = '';
-            typingIndicator.classList.remove('active');
-        }
-
-        // 6. Timer di Conversazione
-        function startTimer() {
-            stopTimer();
-            secondsConnected = 0;
-            chatTimer.textContent = 'Connesso: 00:00';
-            timerInterval = setInterval(() => {
-                secondsConnected++;
-                const mins = String(Math.floor(secondsConnected / 60)).padStart(2, '0');
-                const secs = String(secondsConnected % 60).padStart(2, '0');
-                chatTimer.textContent = `Connesso: ${mins}:${secs}`;
-            }, 1000);
-        }
-
-        function stopTimer() {
-            if (timerInterval) clearInterval(timerInterval);
-        }
-
-        // 7. Modale Visualizzazione Foto
-        function openImageModal(src) {
-            modalImg.src = src;
-            imageModal.classList.add('active');
-        }
-
-        closeModal.addEventListener('click', () => {
-            imageModal.classList.remove('active');
         });
     </script>
 </body>
