@@ -28,6 +28,7 @@ let waitingUser = null;
 io.on('connection', (socket) => {
     console.log(`Utente connesso: ${socket.id}`);
 
+    // Cerca un partner
     socket.on('find_partner', () => {
         if (waitingUser && waitingUser.id !== socket.id) {
             const partnerSocket = waitingUser;
@@ -48,19 +49,36 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Annulla ricerca prima di trovare un abbinamento
+    socket.on('cancel_search', () => {
+        if (waitingUser && waitingUser.id === socket.id) {
+            waitingUser = null;
+            console.log(`Utente ${socket.id} ha annullato la ricerca.`);
+        }
+    });
+
+    // Invio messaggi (testo o immagini)
     socket.on('send_message', (data) => {
         if (socket.roomId) {
             socket.to(socket.roomId).emit('receive_message', data);
         }
     });
 
-    socket.on('typing', (isTyping) => {
+    // Gestione Scrittura (Typing)
+    socket.on('typing', () => {
         if (socket.roomId) {
-            socket.to(socket.roomId).emit('partner_typing', isTyping);
+            socket.to(socket.roomId).emit('partner_typing');
         }
     });
 
-    socket.on('leave_room', () => disconnectUser(socket));
+    socket.on('stop_typing', () => {
+        if (socket.roomId) {
+            socket.to(socket.roomId).emit('partner_stop_typing');
+        }
+    });
+
+    // Abbandona la chat
+    socket.on('leave_chat', () => disconnectUser(socket));
     socket.on('disconnect', () => disconnectUser(socket));
 
     function disconnectUser(s) {
