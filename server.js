@@ -9,8 +9,9 @@ const server = http.createServer(app);
 // Serve i file statici (index.html, immagini, sw.js, manifest.json, ecc.)
 app.use(express.static(path.join(__dirname)));
 
-// Configurazione Socket.io
+// Configurazione Socket.io con limite dati fino a 10MB (maxHttpBufferSize)
 const io = new Server(server, {
+    maxHttpBufferSize: 1e7, // <--- FONDAMENTALE: previene le disconnessioni con le foto!
     cors: {
         origin: "*",
         methods: ["GET", "POST"]
@@ -110,4 +111,4 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server attivo sulla porta ${PORT}`);
-});
+});    
