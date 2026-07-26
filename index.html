@@ -138,7 +138,7 @@
                 </button>
                 <input type="file" id="gallery-input" accept="image/*" style="display: none;">
 
-                <!-- Fotocamera Diretta -->
+                <!-- Fotocamera -->
                 <button class="btn-attach" id="camera-btn" title="Scatta Foto">
                     <i class="fa-solid fa-camera"></i>
                 </button>
@@ -155,7 +155,8 @@
     <script>
         const socket = io({
             transports: ['polling', 'websocket'],
-            reconnectionAttempts: 10
+            reconnectionAttempts: 10,
+            maxHttpBufferSize: 1e7
         });
 
         const headerStatus = document.getElementById('header-status');
@@ -227,7 +228,7 @@
         sendBtn.addEventListener('click', sendMessage);
         messageInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
 
-        // FUNZIONE DI COMPRESSIONE E RIDIMENSIONAMENTO FOTO
+        // COMPRESSIONE SUPER LEGGERA FOTO
         function compressAndSendImage(file) {
             if (!file) return;
 
@@ -238,7 +239,7 @@
                     const canvas = document.createElement('canvas');
                     let width = img.width;
                     let height = img.height;
-                    const max_size = 800; // Dimensione massima in px (super leggera e velocissima)
+                    const max_size = 600; // Ridotto a 600px per massima stabilità
 
                     if (width > height) {
                         if (width > max_size) {
@@ -257,10 +258,9 @@
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
 
-                    // Converte in JPEG compresso (qualità 0.7 = 70%)
-                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                    // Qualità al 50% per un file piccolissimo (circa 30KB)
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5);
 
-                    // Invia via Socket
                     socket.emit('send_message', { image: compressedBase64 });
                     addImgMsg(compressedBase64, 'sent');
                 };
