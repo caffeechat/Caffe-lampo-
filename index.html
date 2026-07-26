@@ -23,7 +23,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Libreria Socket.io (Connessione flessibile automatica/remota) -->
+    <!-- Libreria Socket.io -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
     <!-- Registrazione Service Worker per PWA -->
@@ -638,15 +638,8 @@
     </div>
 
     <script>
-        // Rileva automaticamente se siamo su localhost o Render
-        const RENDER_BACKEND_URL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-            ? "/" 
-            : "https://caffe-lampo.onrender.com"; 
-
-        const socket = io(RENDER_BACKEND_URL, {
-            transports: ['websocket', 'polling'],
-            reconnectionAttempts: 10
-        });
+        // Si connette automaticamente all'origine da cui viene aperta la pagina
+        const socket = io();
 
         // Elementi DOM
         const screenLobby = document.getElementById('screen-lobby');
