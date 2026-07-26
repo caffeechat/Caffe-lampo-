@@ -23,36 +23,48 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-let waitingUser = null;
+// Salviamo SOLO l'ID del socket in attesa, non l'intero oggetto
+let waitingSocketId = null;
 
 io.on('connection', (socket) => {
-    console.log(`Utente connesso: ${socket.id}`);
+    console.log(`+ Utente connesso: ${socket.id}`);
 
     // Cerca un partner
     socket.on('find_partner', () => {
-        if (waitingUser && waitingUser.id !== socket.id) {
-            const partnerSocket = waitingUser;
-            waitingUser = null;
+        // Verifica se c'è un altro utente in attesa ed è diverso da se stesso
+        if (waitingSocketId && waitingSocketId !== socket.id) {
+            const partnerSocket = io.sockets.sockets.get(waitingSocketId);
 
-            const roomId = `room_${socket.id}_${partnerSocket.id}`;
-            socket.join(roomId);
-            partnerSocket.join(roomId);
+            // Se il partner esiste ed è ancora connesso
+            if (partnerSocket && partnerSocket.connected) {
+                const roomId = `room_${socket.id}_${partnerSocket.id}`;
 
-            socket.roomId = roomId;
-            partnerSocket.roomId = roomId;
+                // Unisci entrambi gli utenti nella stanza
+                socket.join(roomId);
+                partnerSocket.join(roomId);
 
-            io.to(roomId).emit('peer_connected');
-            console.log(`Match creato! Stanza: ${roomId}`);
-        } else {
-            waitingUser = socket;
-            console.log(`Utente ${socket.id} in attesa.`);
+                socket.roomId = roomId;
+                partnerSocket.roomId = roomId;
+
+                // Reset dell'utente in attesa
+                waitingSocketId = null;
+
+                // Avvisa entrambi i client
+                io.to(roomId).emit('peer_connected');
+                console.log(`MATCH CREATO! Stanza: ${roomId}`);
+                return;
+            }
         }
+
+        // Se la coda è vuota o il partner in attesa non era più connesso
+        waitingSocketId = socket.id;
+        console.log(`Utente ${socket.id} in attesa di un partner...`);
     });
 
     // Annulla ricerca prima di trovare un abbinamento
     socket.on('cancel_search', () => {
-        if (waitingUser && waitingUser.id === socket.id) {
-            waitingUser = null;
+        if (waitingSocketId === socket.id) {
+            waitingSocketId = null;
             console.log(`Utente ${socket.id} ha annullato la ricerca.`);
         }
     });
@@ -77,19 +89,21 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Abbandona la chat
-    socket.on('leave_chat', () => disconnectUser(socket));
-    socket.on('disconnect', () => disconnectUser(socket));
+    // Abbandona la chat o Disconnessione
+    socket.on('leave_chat', () => cleanUpUser(socket));
+    socket.on('disconnect', () => cleanUpUser(socket));
 
-    function disconnectUser(s) {
-        if (waitingUser && waitingUser.id === s.id) {
-            waitingUser = null;
+    function cleanUpUser(s) {
+        if (waitingSocketId === s.id) {
+            waitingSocketId = null;
         }
+
         if (s.roomId) {
             s.to(s.roomId).emit('peer_disconnected');
             s.leave(s.roomId);
             s.roomId = null;
         }
+        console.log(`- Utente uscito/disconnesso: ${s.id}`);
     }
 });
 
