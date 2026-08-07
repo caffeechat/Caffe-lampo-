@@ -2,6 +2,7 @@ const CACHE_NAME = 'pausa-caffe-v1';
 const urlsToCache = [
   './',
   './index.html',
+  './app.js',
   './manifest.json',
   './icona.png'
 ];
