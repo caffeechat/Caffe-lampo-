@@ -12,6 +12,8 @@ app.use(express.static(path.join(__dirname)));
 // Configurazione Socket.io con limite dati fino a 10MB (maxHttpBufferSize)
 const io = new Server(server, {
     maxHttpBufferSize: 1e7, // <--- FONDAMENTALE: previene le disconnessioni con le foto!
+    pingTimeout: 60000, // tollera brevi sospensioni del browser (es. apertura fotocamera)
+    pingInterval: 25000,
     cors: {
         origin: "*",
         methods: ["GET", "POST"]
