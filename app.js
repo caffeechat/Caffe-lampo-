@@ -19,10 +19,16 @@ const galleryBtn = document.getElementById('gallery-btn');
 const galleryInput = document.getElementById('gallery-input');
 const cameraBtn = document.getElementById('camera-btn');
 const cameraInput = document.getElementById('camera-input');
+const cameraOverlay = document.getElementById('camera-overlay');
+const cameraVideo = document.getElementById('camera-video');
+const cameraShootBtn = document.getElementById('camera-shoot-btn');
+const cameraCancelBtn = document.getElementById('camera-cancel-btn');
+let cameraStream = null;
 
 let isSearching = false;
 let isSendingImage = false;
 const MAX_IMAGE_BYTES = 300 * 1024; // ~300KB soglia sicura per evitare disconnessioni
+const MAX_SOURCE_BYTES = 25 * 1024 * 1024; // 25MB, oltre non proviamo nemmeno (rischio crash)
 
 socket.on('connect', () => {
     headerStatus.innerHTML = '<span class="status-dot"></span> Online';
@@ -133,18 +139,10 @@ async function getScaledCanvas(file, maxSize) {
     return canvas;
 }
 
-// COMPRESSIONE ADATTIVA FOTO: riduce dimensione/qualità finché il file
-// non è sotto la soglia di sicurezza, evitando disconnessioni sulle foto pesanti.
-const MAX_SOURCE_BYTES = 25 * 1024 * 1024; // 25MB, oltre non proviamo nemmeno (rischio crash)
-
-async function compressAndSendImage(file) {
-    if (!file || isSendingImage) return;
-
-    if (file.size > MAX_SOURCE_BYTES) {
-        showSystemMsg('⚠️ Foto troppo grande per essere elaborata su questo dispositivo.');
-        return;
-    }
-
+// Comprime adattivamente un canvas sorgente e lo invia (usata sia dal file
+// picker che dallo scatto in-page) finché non è sotto MAX_IMAGE_BYTES.
+async function sendCanvasAsImage(sourceCanvas) {
+    if (isSendingImage) return;
     isSendingImage = true;
     setAttachButtonsEnabled(false);
 
@@ -153,10 +151,14 @@ async function compressAndSendImage(file) {
         let quality = 0.6;
         let result = null;
 
-        // Riduce progressivamente dimensione e qualità finché il
-        // risultato non è sotto MAX_IMAGE_BYTES (max 6 tentativi).
         for (let attempt = 0; attempt < 6; attempt++) {
-            const canvas = await getScaledCanvas(file, maxSize);
+            const scale = Math.min(1, maxSize / Math.max(sourceCanvas.width, sourceCanvas.height));
+            const w = Math.max(1, Math.round(sourceCanvas.width * scale));
+            const h = Math.max(1, Math.round(sourceCanvas.height * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            canvas.getContext('2d').drawImage(sourceCanvas, 0, 0, w, h);
             result = canvas.toDataURL('image/jpeg', quality);
 
             if (base64Size(result) <= MAX_IMAGE_BYTES) break;
@@ -173,10 +175,26 @@ async function compressAndSendImage(file) {
         socket.emit('send_message', { image: result });
         addImgMsg(result, 'sent');
     } catch (err) {
-        showSystemMsg('⚠️ Errore durante l\'elaborazione della foto. Prova a ridurre la risoluzione della fotocamera nelle impostazioni del telefono.');
+        showSystemMsg('⚠️ Errore durante l\'invio della foto.');
     } finally {
         isSendingImage = false;
         setAttachButtonsEnabled(true);
+    }
+}
+
+async function compressAndSendImage(file) {
+    if (!file || isSendingImage) return;
+
+    if (file.size > MAX_SOURCE_BYTES) {
+        showSystemMsg('⚠️ Foto troppo grande per essere elaborata su questo dispositivo.');
+        return;
+    }
+
+    try {
+        const canvas = await getScaledCanvas(file, 700);
+        await sendCanvasAsImage(canvas);
+    } catch (err) {
+        showSystemMsg('⚠️ Errore durante l\'elaborazione della foto. Prova a ridurre la risoluzione della fotocamera nelle impostazioni del telefono.');
     }
 }
 
@@ -201,7 +219,49 @@ galleryInput.addEventListener('change', (e) => {
     galleryInput.value = '';
 });
 
-cameraBtn.addEventListener('click', () => cameraInput.click());
+// FOTOCAMERA IN-PAGE: usa getUserMedia per restare sempre dentro il browser.
+// Evita di aprire l'app fotocamera nativa, che su alcuni telefoni (es. MIUI)
+// ricarica la pagina al ritorno e fa perdere la connessione alla chat.
+async function openCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        cameraInput.click(); // fallback per browser che non supportano getUserMedia
+        return;
+    }
+    try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' },
+            audio: false
+        });
+        cameraVideo.srcObject = cameraStream;
+        cameraOverlay.classList.add('active');
+    } catch (err) {
+        // permesso negato o fotocamera non disponibile: fallback al metodo classico
+        cameraInput.click();
+    }
+}
+
+function closeCamera() {
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+    }
+    cameraOverlay.classList.remove('active');
+}
+
+cameraBtn.addEventListener('click', openCamera);
+cameraCancelBtn.addEventListener('click', closeCamera);
+
+cameraShootBtn.addEventListener('click', async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = cameraVideo.videoWidth;
+    canvas.height = cameraVideo.videoHeight;
+    canvas.getContext('2d').drawImage(cameraVideo, 0, 0);
+    closeCamera();
+    await sendCanvasAsImage(canvas);
+});
+
+// Fallback: se il browser non supporta getUserMedia, si usa comunque il
+// vecchio input file con capture (stesso comportamento di prima).
 cameraInput.addEventListener('change', (e) => {
     compressAndSendImage(e.target.files[0]);
     cameraInput.value = '';

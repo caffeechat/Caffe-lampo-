@@ -82,7 +82,15 @@
         .btn-attach:hover { color: var(--accent-light); }
         .input-wrapper { flex: 1; background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 24px; padding: 4px 14px; }
         .chat-input { width: 100%; background: none; border: none; color: var(--text-main); font-size: 0.95rem; outline: none; padding: 8px 0; }
-        .btn-send { width: 40px; height: 40px; border-radius: 50%; background: var(--accent-primary); color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .btn-send { width: 40px; height: 40px; border-radius: 50%; background: var(--accent-primary); color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+        /* Fotocamera in-page */
+        .camera-overlay { display: none; position: fixed; inset: 0; background: #000; z-index: 999; flex-direction: column; align-items: center; justify-content: center; }
+        .camera-overlay.active { display: flex; }
+        #camera-video { width: 100%; height: 100%; object-fit: cover; }
+        .camera-controls { position: absolute; bottom: 30px; left: 0; right: 0; display: flex; align-items: center; justify-content: space-around; padding: 0 24px; }
+        .camera-btn-shoot { width: 68px; height: 68px; border-radius: 50%; background: white; border: 4px solid rgba(255,255,255,0.4); cursor: pointer; }
+        .camera-btn-cancel { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.15); color: white; border: none; font-size: 1.1rem; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -150,6 +158,16 @@
                 <button class="btn-send" id="send-btn"><i class="fa-solid fa-paper-plane"></i></button>
             </div>
         </main>
+
+        <!-- FOTOCAMERA IN-PAGE (evita di uscire dal browser e perdere la connessione) -->
+        <div class="camera-overlay" id="camera-overlay">
+            <video id="camera-video" autoplay playsinline muted></video>
+            <div class="camera-controls">
+                <button class="camera-btn-cancel" id="camera-cancel-btn"><i class="fa-solid fa-xmark"></i></button>
+                <button class="camera-btn-shoot" id="camera-shoot-btn"></button>
+                <div style="width:52px;"></div>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>
