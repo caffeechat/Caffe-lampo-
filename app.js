@@ -21,6 +21,8 @@ const cameraBtn = document.getElementById('camera-btn');
 const cameraInput = document.getElementById('camera-input');
 
 let isSearching = false;
+let isSendingImage = false;
+const MAX_IMAGE_BYTES = 300 * 1024; // ~300KB soglia sicura per evitare disconnessioni
 
 socket.on('connect', () => {
     headerStatus.innerHTML = '<span class="status-dot"></span> Online';
@@ -55,10 +57,7 @@ socket.on('peer_connected', () => {
 });
 
 socket.on('peer_disconnected', () => {
-    const sysMsg = document.createElement('div');
-    sysMsg.className = 'system-msg';
-    sysMsg.textContent = 'Lo sconosciuto si è disconnesso.';
-    chatMessages.appendChild(sysMsg);
+    showSystemMsg('Lo sconosciuto si è disconnesso.');
 });
 
 function sendMessage() {
@@ -73,45 +72,110 @@ function sendMessage() {
 sendBtn.addEventListener('click', sendMessage);
 messageInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
 
-// COMPRESSIONE SUPER LEGGERA FOTO
+// Stima i byte reali di una stringa base64 (data URL)
+function base64Size(dataUrl) {
+    const commaIdx = dataUrl.indexOf(',');
+    const base64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl;
+    return Math.floor(base64.length * 0.75);
+}
+
+// COMPRESSIONE ADATTIVA FOTO: riduce dimensione/qualità finché il file
+// non è sotto la soglia di sicurezza, evitando disconnessioni sulle foto pesanti.
 function compressAndSendImage(file) {
-    if (!file) return;
+    if (!file || isSendingImage) return;
+    isSendingImage = true;
+    setAttachButtonsEnabled(false);
 
     const reader = new FileReader();
+
+    reader.onerror = function() {
+        isSendingImage = false;
+        setAttachButtonsEnabled(true);
+        showSystemMsg('⚠️ Impossibile leggere la foto. Riprova.');
+    };
+
     reader.onload = function(e) {
         const img = new Image();
+
+        img.onerror = function() {
+            isSendingImage = false;
+            setAttachButtonsEnabled(true);
+            showSystemMsg('⚠️ Formato immagine non supportato.');
+        };
+
         img.onload = function() {
-            const canvas = document.createElement('canvas');
-            let width = img.width;
-            let height = img.height;
-            const max_size = 600; // Ridotto a 600px per massima stabilità
+            try {
+                let maxSize = 600;
+                let quality = 0.6;
+                let result = null;
 
-            if (width > height) {
-                if (width > max_size) {
-                    height *= max_size / width;
-                    width = max_size;
+                // Riduce progressivamente dimensione e qualità finché il
+                // risultato non è sotto MAX_IMAGE_BYTES (max 6 tentativi).
+                for (let attempt = 0; attempt < 6; attempt++) {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > maxSize) {
+                            height *= maxSize / width;
+                            width = maxSize;
+                        }
+                    } else {
+                        if (height > maxSize) {
+                            width *= maxSize / height;
+                            height = maxSize;
+                        }
+                    }
+
+                    canvas.width = Math.max(1, Math.round(width));
+                    canvas.height = Math.max(1, Math.round(height));
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                    result = canvas.toDataURL('image/jpeg', quality);
+
+                    if (base64Size(result) <= MAX_IMAGE_BYTES) break;
+
+                    // Ancora troppo pesante: riduci qualità e dimensione per il prossimo giro
+                    quality = Math.max(0.25, quality - 0.15);
+                    maxSize = Math.max(250, Math.round(maxSize * 0.75));
                 }
-            } else {
-                if (height > max_size) {
-                    width *= max_size / height;
-                    height = max_size;
+
+                if (!result || base64Size(result) > MAX_IMAGE_BYTES) {
+                    isSendingImage = false;
+                    setAttachButtonsEnabled(true);
+                    showSystemMsg('⚠️ Foto troppo pesante, prova con un\'altra immagine.');
+                    return;
                 }
+
+                socket.emit('send_message', { image: result });
+                addImgMsg(result, 'sent');
+            } catch (err) {
+                showSystemMsg('⚠️ Errore durante l\'elaborazione della foto.');
+            } finally {
+                isSendingImage = false;
+                setAttachButtonsEnabled(true);
             }
-
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-
-            // Qualità al 50% per un file piccolissimo (circa 30KB)
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5);
-
-            socket.emit('send_message', { image: compressedBase64 });
-            addImgMsg(compressedBase64, 'sent');
         };
         img.src = e.target.result;
     };
     reader.readAsDataURL(file);
+}
+
+function setAttachButtonsEnabled(enabled) {
+    galleryBtn.disabled = !enabled;
+    cameraBtn.disabled = !enabled;
+    galleryBtn.style.opacity = enabled ? '1' : '0.5';
+    cameraBtn.style.opacity = enabled ? '1' : '0.5';
+}
+
+function showSystemMsg(text) {
+    const sysMsg = document.createElement('div');
+    sysMsg.className = 'system-msg';
+    sysMsg.textContent = text;
+    chatMessages.appendChild(sysMsg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 galleryBtn.addEventListener('click', () => galleryInput.click());
