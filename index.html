@@ -1,175 +1,80 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pausa Caffè - Chat Anonima</title>
-    
-    <meta name="theme-color" content="#120D0A">
-    <link rel="icon" type="image/png" href="icona.png">
-    
-    <!-- Google Fonts & FontAwesome -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- Socket.io -->
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-
-    <style>
-        :root {
-            --bg-primary: #120D0A;
-            --bg-secondary: #1A130E;
-            --bg-card: #241C15;
-            --accent-primary: #D97706;
-            --accent-hover: #B45309;
-            --accent-light: #F59E0B;
-            --text-main: #F3F4F6;
-            --text-muted: #9CA3AF;
-            --border-color: #362A20;
-            --msg-sent: #D97706;
-            --msg-received: #2A2119;
-            --online-green: #10B981;
-            --danger-red: #EF4444;
-            --radius-md: 16px;
-            --radius-lg: 24px;
-            --font-family: 'Plus Jakarta Sans', sans-serif;
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-family); }
-        body, html { height: 100%; width: 100%; background-color: var(--bg-primary); color: var(--text-main); overflow: hidden; display: flex; justify-content: center; align-items: center; }
-
-        .app-container { width: 100%; max-width: 600px; height: 100%; max-height: 100vh; background-color: var(--bg-secondary); display: flex; flex-direction: column; position: relative; }
-        @media (min-width: 600px) { .app-container { height: 92vh; border-radius: var(--radius-lg); border: 1px solid var(--border-color); } }
-
-        .app-header { padding: 14px 18px; background-color: rgba(26, 19, 14, 0.95); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; }
-        .brand-info { display: flex; align-items: center; gap: 12px; }
-        .brand-icon { width: 40px; height: 40px; background: linear-gradient(135deg, #D97706, #78350F); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-        .brand-text h1 { font-size: 1.1rem; font-weight: 700; }
-        .brand-text p { font-size: 0.75rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background-color: var(--online-green); display: inline-block; }
-
-        .screen { flex: 1; display: none; flex-direction: column; overflow: hidden; position: relative; }
-        .screen.active { display: flex; }
-
-        .lobby-content { flex: 1; padding: 30px 24px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 24px; }
-        .cup-container { width: 90px; height: 90px; background: #2A2018; border: 2px solid var(--border-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 42px; }
-
-        .btn-primary { width: 100%; max-width: 340px; padding: 16px 24px; background: linear-gradient(135deg, var(--accent-primary), var(--accent-hover)); color: white; border: none; border-radius: var(--radius-md); font-size: 1rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
-        
-        .searching-state { display: none; flex-direction: column; align-items: center; gap: 16px; }
-        .searching-state.active { display: flex; }
-        .spinner { width: 28px; height: 28px; border: 3px solid rgba(217, 119, 6, 0.2); border-top-color: var(--accent-primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* Chat */
-        .chat-messages { flex: 1; padding: 20px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-        .system-msg { align-self: center; background: rgba(36, 28, 21, 0.8); border: 1px solid var(--border-color); color: var(--text-muted); font-size: 0.8rem; padding: 8px 16px; border-radius: 20px; text-align: center; }
-        .message { max-width: 80%; display: flex; flex-direction: column; gap: 4px; }
-        .message.sent { align-self: flex-end; }
-        .message.received { align-self: flex-start; }
-        .msg-bubble { padding: 10px 14px; border-radius: 18px; font-size: 0.92rem; word-break: break-word; }
-        .message.sent .msg-bubble { background-color: var(--msg-sent); color: white; }
-        .message.received .msg-bubble { background-color: var(--msg-received); color: var(--text-main); border: 1px solid var(--border-color); }
-        .msg-image { max-width: 100%; max-height: 250px; border-radius: 12px; display: block; }
-
-        .chat-controls { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: var(--bg-primary); border-top: 1px solid var(--border-color); }
-        .btn-next { background: rgba(239, 68, 68, 0.15); color: var(--danger-red); border: 1px solid rgba(239, 68, 68, 0.3); padding: 8px 18px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-
-        .chat-input-area { padding: 12px 12px; background-color: var(--bg-card); border-top: 1px solid var(--border-color); display: flex; align-items: center; gap: 8px; }
-        .btn-attach { background: none; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; padding: 6px; }
-        .btn-attach:hover { color: var(--accent-light); }
-        .input-wrapper { flex: 1; background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 24px; padding: 4px 14px; }
-        .chat-input { width: 100%; background: none; border: none; color: var(--text-main); font-size: 0.95rem; outline: none; padding: 8px 0; }
-        .btn-send { width: 40px; height: 40px; border-radius: 50%; background: var(--accent-primary); color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ChatLampo</title>
 
-        /* Fotocamera in-page */
-        .camera-overlay { display: none; position: fixed; inset: 0; background: #000; z-index: 999; flex-direction: column; align-items: center; justify-content: center; }
-        .camera-overlay.active { display: flex; }
-        #camera-video { width: 100%; height: 100%; object-fit: cover; }
-        .camera-controls { position: absolute; bottom: 30px; left: 0; right: 0; display: flex; align-items: center; justify-content: space-around; padding: 0 24px; }
-        .camera-btn-shoot { width: 68px; height: 68px; border-radius: 50%; background: white; border: 4px solid rgba(255,255,255,0.4); cursor: pointer; }
-        .camera-btn-cancel { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.15); color: white; border: none; font-size: 1.1rem; cursor: pointer; }
-    </style>
-</head>
-<body>
-
-    <div class="app-container">
-        <header class="app-header">
-            <div class="brand-info">
-                <div class="brand-icon">☕</div>
-                <div class="brand-text">
-                    <h1>Pausa Caffè</h1>
-                    <p id="header-status"><span class="status-dot"></span> Online</p>
-                </div>
-            </div>
-        </header>
-
-        <!-- LOBBY SCREEN -->
-        <main class="screen active" id="screen-lobby">
-            <div class="lobby-content">
-                <div class="cup-container">☕</div>
-                <div>
-                    <h2>Pausa Caffè</h2>
-                    <p style="color: var(--text-muted); margin-top: 6px;">Chat anonima in tempo reale</p>
-                </div>
-
-                <div class="searching-state" id="searching-state">
-                    <div class="spinner"></div>
-                    <p style="color: var(--accent-light); font-weight: 600;">Ricerca partner in corso...</p>
-                </div>
-
-                <button class="btn-primary" id="start-chat-btn">
-                    <i class="fa-solid fa-comments"></i>
-                    <span id="start-btn-text">Trova uno Sconosciuto</span>
-                </button>
-            </div>
-        </main>
-
-        <!-- CHAT SCREEN -->
-        <main class="screen" id="screen-chat">
-            <div class="chat-messages" id="chat-messages">
-                <div class="system-msg">🔒 Chat crittografata. Sei connesso con uno sconosciuto. Dì ciao!</div>
-            </div>
-
-            <div class="chat-controls">
-                <button class="btn-next" id="next-partner-btn">
-                    <i class="fa-solid fa-forward"></i> Prossimo / Chiudi
-                </button>
-            </div>
-
-            <div class="chat-input-area">
-                <!-- Galleria -->
-                <button class="btn-attach" id="gallery-btn" title="Galleria">
-                    <i class="fa-solid fa-paperclip"></i>
-                </button>
-                <input type="file" id="gallery-input" accept="image/*" style="display: none;">
-
-                <!-- Fotocamera -->
-                <button class="btn-attach" id="camera-btn" title="Scatta Foto">
-                    <i class="fa-solid fa-camera"></i>
-                </button>
-                <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
-
-                <div class="input-wrapper">
-                    <input type="text" class="chat-input" id="message-input" placeholder="Scrivi un messaggio...">
-                </div>
-                <button class="btn-send" id="send-btn"><i class="fa-solid fa-paper-plane"></i></button>
-            </div>
-        </main>
-
-        <!-- FOTOCAMERA IN-PAGE (evita di uscire dal browser e perdere la connessione) -->
-        <div class="camera-overlay" id="camera-overlay">
-            <video id="camera-video" autoplay playsinline muted></video>
-            <div class="camera-controls">
-                <button class="camera-btn-cancel" id="camera-cancel-btn"><i class="fa-solid fa-xmark"></i></button>
-                <button class="camera-btn-shoot" id="camera-shoot-btn"></button>
-                <div style="width:52px;"></div>
-            </div>
-        </div>
-    </div>
-
-    <script src="app.js"></script>
-</body>
-</html>
+  <!-- Collegamento Manifest e Icona PWA per Installazione Nativa -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#252525">
+  <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/9374/9374982.png">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/9374/9374982.png">
+
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <main class="app-viewport">
+    
+    <!-- INTESTAZIONE -->
+    <header class="app-header">
+      <h1>☕ ChatLampo</h1>
+      <p>La tua pausa, la tua chat temporanea.</p>
+    </header>
+
+    <!-- SCHERMATA HOME / SELEZIONE STANZA -->
+    <section id="intro-screen" class="screen-panel">
+      <button id="btn-public" class="btn btn-success">🌐 Entra nella Chat Pubblica</button>
+      
+      <div class="divider"><span>oppure stanza privata</span></div>
+
+      <div class="private-box">
+        <button id="btn-create" class="btn btn-secondary">Crea Stanza Privata</button>
+        <div class="join-row">
+          <input type="text" id="room-code-input" placeholder="Codice Stanza" maxlength="10">
+          <button id="btn-join" class="btn btn-primary">Entra</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCHERMATA CHAT -->
+    <section id="chat-screen" class="screen-panel" style="display: none;">
+      
+      <div class="room-bar">
+        <span>Stanza: <strong id="room-code-display">---</strong></span>
+        <div class="room-bar-actions">
+          <button id="btn-admin" class="icon-btn-small" title="Modalità moderatore">🔑</button>
+          <button id="btn-leave" class="btn-danger">Esci</button>
+        </div>
+      </div>
+
+      <div id="messages" class="chat-history"></div>
+
+      <div class="chat-controls">
+        <input type="file" id="camera-input" accept="image/*" capture="environment" hidden>
+        <button id="btn-camera" class="icon-btn" title="Scatta foto">📷</button>
+
+        <input type="file" id="gallery-input" accept="image/*" hidden>
+        <button id="btn-gallery" class="icon-btn" title="Galleria">🖼️</button>
+
+        <input type="text" id="message-input" placeholder="Scrivi un messaggio...">
+        <button id="btn-send" class="btn btn-primary">Invia</button>
+      </div>
+
+    </section>
+
+  </main>
+
+  <script src="supabase.js"></script>
+  <script src="app.js"></script>
+
+  <!-- Attivazione Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>
