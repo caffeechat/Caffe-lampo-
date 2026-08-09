@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic'];
 
   // --- Modalità Moderatore (solo lato client, vedi nota sicurezza) ---
-  const ADMIN_PASSWORD = 'lampo2026'; // Cambia questa password a piacere
+  const ADMIN_PASSWORD = 'ballaro32'; // Cambia questa password a piacere
   const btnAdmin = document.getElementById('btn-admin');
   let isAdmin = sessionStorage.getItem('chatlampo_admin') === '1';
 
